@@ -2,7 +2,7 @@
 	"name": "housing-minecraft",
 	"version": "1.0.0",
 	"description": "Minecraft clone for housing using three.js",
-	"main": "index.ts",
+	"main": "mod.ts",
 	"scripts": {},
 	"keywords": [],
 	"author": "ImaDoofus",

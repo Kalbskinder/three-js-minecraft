@@ -1,6 +1,6 @@
 import { Group, Scene, Vector3 } from "three";
 import { FloatingText } from "./FloatingText.ts";
-import { Minecraft } from "@housingeditor/housing-minecraft";
+import { Minecraft } from "housing-minecraft";
 
 const MAX_LINES = 5;
 const DISTANCE_APART = 0.375;
