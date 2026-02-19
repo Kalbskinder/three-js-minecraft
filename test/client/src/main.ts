@@ -1,20 +1,20 @@
 import "./style.css";
-import { Minecraft, HousingWorld } from "housing-craft";
+import { Minecraft, WorldGenerator } from "housing-craft";
 
 const canvas = document.querySelector("canvas")!;
 const minecraft = new Minecraft(canvas);
 
-for (let x = 0; x < HousingWorld.SIZE; x++) {
-  for (let z = 0; z < HousingWorld.SIZE; z++) {
-    for (let y = 0; y < 10; y++) {
-      if (Math.random() < 0.01) {
-        minecraft.world.set(x, y, z, Math.floor(Math.random() * 176));
-      }
-    }
-  }
-}
+// Seed-based world generation (change seed to get a different world)
+const generator = new WorldGenerator({ seed: 12345 });
+generator.generate(minecraft.world);
 
 minecraft.world.buildChunks();
+
+window.addEventListener("resize", () => {
+  minecraft.resize();
+});
+
+minecraft.resize();
 
 window.addEventListener("resize", () => {
   minecraft.resize();
