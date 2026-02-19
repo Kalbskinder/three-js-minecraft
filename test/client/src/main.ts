@@ -4,11 +4,14 @@ import { Minecraft, WorldGenerator } from "housing-craft";
 const canvas = document.querySelector("canvas")!;
 const minecraft = new Minecraft(canvas);
 
-// Seed-based world generation (change seed to get a different world)
+// Change `seed` to get a completely different world
 const generator = new WorldGenerator({ seed: 12345 });
-generator.generate(minecraft.world);
 
-minecraft.world.buildChunks();
+// Stream chunks every frame centred on the camera
+minecraft.renderCallbacks.push(() => {
+  const { x, z } = minecraft.camera.position;
+  minecraft.world.update(x, z, generator, /* renderDistance */ 3);
+});
 
 window.addEventListener("resize", () => {
   minecraft.resize();
@@ -16,8 +19,3 @@ window.addEventListener("resize", () => {
 
 minecraft.resize();
 
-window.addEventListener("resize", () => {
-  minecraft.resize();
-});
-
-minecraft.resize();
