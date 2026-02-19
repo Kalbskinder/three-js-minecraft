@@ -13,6 +13,9 @@ import { BlockRegistry } from "../../block/BlockRegistry.ts";
 export default class Chunk {
 	static readonly SIZE = 32;
 
+	/** Raw block data stored locally per chunk (SIZE^3 bytes). */
+	blocks: Uint8Array = new Uint8Array(Chunk.SIZE ** 3);
+
 	geometry = {
 		positions: [] as number[],
 		normals: [] as number[],
@@ -22,6 +25,16 @@ export default class Chunk {
 	};
 	mesh: Mesh;
 	isDirty = false;
+
+	/** Get a block by chunk-local coordinates. */
+	getBlock(lx: number, ly: number, lz: number): number {
+		return this.blocks[(lx * Chunk.SIZE + ly) * Chunk.SIZE + lz];
+	}
+
+	/** Set a block by chunk-local coordinates. */
+	setBlock(lx: number, ly: number, lz: number, block: number): void {
+		this.blocks[(lx * Chunk.SIZE + ly) * Chunk.SIZE + lz] = block;
+	}
 
 	constructor(
 		public x: number,

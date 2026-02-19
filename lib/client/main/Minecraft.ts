@@ -7,7 +7,7 @@ import {
 	DirectionalLight,
 	AmbientLight,
 	SRGBColorSpace,
-  Vector3,
+	Vector3,
 } from "three";
 import { Settings } from "../settings/Settings";
 import { Sky } from "../world/sky/Sky";
@@ -35,6 +35,9 @@ class Minecraft {
 	public world!: HousingWorld;
 
 	public holograms: Hologram[] = [];
+
+	/** Callbacks invoked every render frame. Use to drive world streaming etc. */
+	public renderCallbacks: Array<() => void> = [];
 
 	constructor(
 		private canvas: HTMLCanvasElement,
@@ -88,7 +91,7 @@ class Minecraft {
 		// this.controls.autoForward = false;
 		// this.controls.dragToLook = true;
 
-		this.camera.position.set(50, 5, 50);
+		this.camera.position.set(50, 100, 50);
 		this.camera.lookAt(0, 0, 0);
 		this.clock = new Clock(true);
 		// Optional controls lock on mousedown
@@ -128,6 +131,7 @@ class Minecraft {
 		} else {
 			this.controls.update(this.clock.getDelta());
 		}
+		for (const cb of this.renderCallbacks) cb();
 		this.renderer.render(this.scene, this.camera);
 
 		requestAnimationFrame(this.render.bind(this));

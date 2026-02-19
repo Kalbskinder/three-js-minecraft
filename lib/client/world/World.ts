@@ -1,165 +1,201 @@
-import { Mesh } from "three";
 import Chunk from "./chunk/Chunk";
 import type { Minecraft } from "../main/Minecraft";
-import { Text } from "troika-three-text";
-import { FloatingText } from "../entities/FloatingText";
+import type { WorldGenerator } from "./WorldGenerator";
 
 export class HousingWorld {
-	static readonly SIZE = 256;
-	static readonly BLOCK_SHIFT = Math.log2(HousingWorld.SIZE);
-	static readonly CHUNKS_PER_AXIS = HousingWorld.SIZE / Chunk.SIZE;
-	static readonly CHUNK_SHIFT = Math.log2(HousingWorld.CHUNKS_PER_AXIS);
+	/** Maximum world height (Y axis remains bounded). */
+	static readonly HEIGHT = 256;
+	/** Number of chunk layers stacked vertically. */
+	static readonly CHUNK_HEIGHT_COUNT = HousingWorld.HEIGHT / Chunk.SIZE; // 8
 
-	public chunks: Array<Chunk | undefined>;
-	private blocks: Uint8Array;
+	/** All loaded chunks, keyed by "cx,cy,cz". */
+	readonly chunks = new Map<string, Chunk>();
 
-	constructor(public minecraft: Minecraft) {
-		this.blocks = new Uint8Array(HousingWorld.SIZE ** 3);
-		this.chunks = new Array(HousingWorld.CHUNKS_PER_AXIS ** 3);
+	/** Chunks that need their mesh rebuilt. */
+	private dirtyChunks = new Set<Chunk>();
 
-		this.createWalls();
+	/** Set of "cx,cz" columns that have already been terrain-generated. */
+	private generatedColumns = new Set<string>();
+
+	constructor(public minecraft: Minecraft) { }
+
+	// ─── Key helpers ──────────────────────────────────────────────────────────
+
+	private chunkKey(cx: number, cy: number, cz: number): string {
+		return `${cx},${cy},${cz}`;
 	}
 
+	private columnKey(cx: number, cz: number): string {
+		return `${cx},${cz}`;
+	}
+
+	// ─── Column generation tracking ───────────────────────────────────────────
+
+	isColumnGenerated(cx: number, cz: number): boolean {
+		return this.generatedColumns.has(this.columnKey(cx, cz));
+	}
+
+	markColumnGenerated(cx: number, cz: number): void {
+		this.generatedColumns.add(this.columnKey(cx, cz));
+	}
+
+	// ─── Chunk access ────────────────────────────────────────────────────────
+
+	getChunk(cx: number, cy: number, cz: number): Chunk | undefined {
+		return this.chunks.get(this.chunkKey(cx, cy, cz));
+	}
+
+	getOrCreateChunk(cx: number, cy: number, cz: number): Chunk {
+		const key = this.chunkKey(cx, cy, cz);
+		let chunk = this.chunks.get(key);
+		if (!chunk) {
+			chunk = new Chunk(cx, cy, cz);
+			this.chunks.set(key, chunk);
+			this.minecraft.scene.add(chunk.mesh);
+		}
+		return chunk;
+	}
+
+	/** Mark a chunk as needing a mesh rebuild. */
+	markDirty(chunk: Chunk): void {
+		chunk.isDirty = true;
+		this.dirtyChunks.add(chunk);
+	}
+
+	// ─── Block access (world coordinates) ────────────────────────────────────
+
+	set(x: number, y: number, z: number, block: number): void {
+		if (y < 0 || y >= HousingWorld.HEIGHT) return;
+		const cx = Math.floor(x / Chunk.SIZE);
+		const cy = Math.floor(y / Chunk.SIZE);
+		const cz = Math.floor(z / Chunk.SIZE);
+		const lx = x - cx * Chunk.SIZE;
+		const ly = y - cy * Chunk.SIZE;
+		const lz = z - cz * Chunk.SIZE;
+		const chunk = this.getOrCreateChunk(cx, cy, cz);
+		chunk.setBlock(lx, ly, lz, block);
+		this.markDirty(chunk);
+	}
+
+	get(x: number, y: number, z: number): number {
+		if (y < 0 || y >= HousingWorld.HEIGHT) return 0;
+		const cx = Math.floor(x / Chunk.SIZE);
+		const cy = Math.floor(y / Chunk.SIZE);
+		const cz = Math.floor(z / Chunk.SIZE);
+		const chunk = this.getChunk(cx, cy, cz);
+		if (!chunk) return 0;
+		const lx = x - cx * Chunk.SIZE;
+		const ly = y - cy * Chunk.SIZE;
+		const lz = z - cz * Chunk.SIZE;
+		return chunk.getBlock(lx, ly, lz);
+	}
+
+	/** Alias for get(); kept for compatibility with Chunk.updateGeometry. */
+	getUnsafe(x: number, y: number, z: number): number {
+		return this.get(x, y, z);
+	}
+
+	// ─── Colour helpers (used by block tinting) ────────────────────────────────
+
 	getFoliageColorAtPosition(
-		x: number,
-		y: number,
-		z: number,
+		_x: number,
+		_y: number,
+		_z: number,
 	): [number, number, number] {
 		return [119 / 255, 171 / 255, 47 / 255];
 	}
 
 	getGrassColorAtPosition(
-		x: number,
-		y: number,
-		z: number,
+		_x: number,
+		_y: number,
+		_z: number,
 	): [number, number, number] {
-		// return [124 / 255, 252 / 255, 0];
-    // return [ 0.5686, 0.5020, 0.2235 ];
-    // 145, 189, 89
-    // 89, 201, 60
-    return [89 / 255, 201 / 255, 60 / 255];
+		return [89 / 255, 201 / 255, 60 / 255];
 	}
 
-	createWalls() {
-		const OFFSET = 256;
-		const wallConfigs = [
-			{ name: "north", axis: "-Z", pos: [0, 0, -OFFSET], rot: [0, 0, 0] },
-			{ name: "south", axis: "+Z", pos: [0, 0, OFFSET], rot: [0, Math.PI, 0] },
-			{
-				name: "east",
-				axis: "+X",
-				pos: [OFFSET, 0, 0],
-				rot: [0, -Math.PI / 2, 0],
-			},
-			{
-				name: "west",
-				axis: "-X",
-				pos: [-OFFSET, 0, 0],
-				rot: [0, Math.PI / 2, 0],
-			},
-		];
+	// ─── Mesh building ────────────────────────────────────────────────────────
 
-		for (const { name, axis, pos, rot } of wallConfigs) {
-			const createText = (text: string, fontSize: number, yOffset: number) => {
-				const txt = new Text();
-				txt.outlineWidth = 1;
-				txt.text = text;
-				txt.anchorX = "center";
-				txt.fontSize = fontSize;
-				txt.position.set(
-					HousingWorld.SIZE / 2 + pos[0],
-					HousingWorld.SIZE / 3 + pos[1] + yOffset,
-					HousingWorld.SIZE / 2 + pos[2],
-				);
-				txt.rotation.set(...rot);
-				txt.sync();
-				return txt;
-			};
-
-			this.minecraft.scene.add(createText(name, 16, 0));
-			this.minecraft.scene.add(createText(axis, 8, -20));
+	/**
+	 * Build meshes for dirty chunks.
+	 * Pass maxChunks to spread work across frames and avoid stutters.
+	 */
+	buildChunks(maxChunks = Infinity): void {
+		let built = 0;
+		for (const chunk of this.dirtyChunks) {
+			chunk.updateGeometry(this);
+			chunk.buildMesh();
+			chunk.isDirty = false;
+			this.dirtyChunks.delete(chunk);
+			if (++built >= maxChunks) break;
 		}
 	}
 
-	private createChunk(x: number, y: number, z: number) {
-		const index = this.getChunkIndex(x, y, z);
-		const chunk = new Chunk(x, y, z);
-		this.chunks[index] = chunk;
-		this.minecraft.scene.add(chunk.mesh);
-	}
+	// ─── Infinite world update ────────────────────────────────────────────────
 
-	set(x: number, y: number, z: number, block: number) {
-		const chunkX = Math.floor(x / Chunk.SIZE);
-		const chunkY = Math.floor(y / Chunk.SIZE);
-		const chunkZ = Math.floor(z / Chunk.SIZE);
-		const chunk = this.getChunk(chunkX, chunkY, chunkZ);
-		chunk.isDirty = true;
-		this.blocks[this.getBlockIndex(x, y, z)] = block;
-	}
+	/**
+	 * Call every frame (or on a tick) to stream chunks around the player.
+	 *
+	 * @param playerX          - Camera/player world X
+	 * @param playerZ          - Camera/player world Z
+	 * @param generator        - The WorldGenerator used to fill new columns
+	 * @param renderDistance   - Half-width in chunks (default 8: 17x17 grid)
+	 * @param maxGenPerFrame   - New columns to generate per call (default 4)
+	 * @param maxBuildPerFrame - Dirty chunks to mesh per call (default 8)
+	 */
+	update(
+		playerX: number,
+		playerZ: number,
+		generator: WorldGenerator,
+		renderDistance = 8,
+		maxGenPerFrame = 1,
+		maxBuildPerFrame = 2,
+	): void {
+		const pcx = Math.floor(playerX / Chunk.SIZE);
+		const pcz = Math.floor(playerZ / Chunk.SIZE);
 
-	get(x: number, y: number, z: number): number {
-		if (this.isOutOfBounds(x, y, z)) return 0;
-		return this.blocks[this.getBlockIndex(x, y, z)];
-	}
-
-	getUnsafe(x: number, y: number, z: number): number {
-		return this.blocks[this.getBlockIndex(x, y, z)];
-	}
-
-	buildChunks() {
-		for (const chunk of this.chunks) {
-			if (chunk && chunk.isDirty) {
-				chunk.updateGeometry(this);
-				chunk.buildMesh();
-				chunk.isDirty = false;
+		// Generate columns from closest ring outward
+		let generated = 0;
+		outer: for (let r = 0; r <= renderDistance; r++) {
+			for (let dx = -r; dx <= r; dx++) {
+				for (let dz = -r; dz <= r; dz++) {
+					if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue; // ring edge only
+					const cx = pcx + dx;
+					const cz = pcz + dz;
+					if (!this.isColumnGenerated(cx, cz)) {
+						generator.generateChunk(this, cx, cz);
+						if (++generated >= maxGenPerFrame) break outer;
+					}
+				}
 			}
 		}
-	}
 
-	clear() {
-		this.blocks.fill(0);
-		for (const chunk of this.chunks) {
-			if (chunk) {
+		// Unload columns too far from the player
+		const unloadLimit = renderDistance + 3;
+		for (const [key, chunk] of this.chunks) {
+			if (
+				Math.abs(chunk.x - pcx) > unloadLimit ||
+				Math.abs(chunk.z - pcz) > unloadLimit
+			) {
 				this.minecraft.scene.remove(chunk.mesh);
+				chunk.mesh.geometry.dispose();
+				this.dirtyChunks.delete(chunk);
+				this.chunks.delete(key);
 			}
 		}
-		this.chunks = new Array(HousingWorld.CHUNKS_PER_AXIS ** 3);
+
+		// Build pending meshes
+		this.buildChunks(maxBuildPerFrame);
 	}
 
-	private getChunkIndex(
-		chunkX: number,
-		chunkY: number,
-		chunkZ: number,
-	): number {
-		return (
-			(((chunkX << HousingWorld.CHUNK_SHIFT) | chunkY) <<
-				HousingWorld.CHUNK_SHIFT) |
-			chunkZ
-		);
-	}
+	// ─── Clearing ─────────────────────────────────────────────────────────────
 
-	private getChunk(chunkX: number, chunkY: number, chunkZ: number): Chunk {
-		const index = this.getChunkIndex(chunkX, chunkY, chunkZ);
-		if (!this.chunks[index]) {
-			this.createChunk(chunkX, chunkY, chunkZ);
+	clear(): void {
+		for (const chunk of this.chunks.values()) {
+			this.minecraft.scene.remove(chunk.mesh);
+			chunk.mesh.geometry.dispose();
 		}
-		return this.chunks[index]!;
-	}
-
-	private getBlockIndex(x: number, y: number, z: number): number {
-		return (
-			(((x << HousingWorld.BLOCK_SHIFT) | y) << HousingWorld.BLOCK_SHIFT) | z
-		);
-	}
-
-	private isOutOfBounds(x: number, y: number, z: number): boolean {
-		return (
-			x < 0 ||
-			x >= HousingWorld.SIZE ||
-			y < 0 ||
-			y >= HousingWorld.SIZE ||
-			z < 0 ||
-			z >= HousingWorld.SIZE
-		);
+		this.chunks.clear();
+		this.dirtyChunks.clear();
+		this.generatedColumns.clear();
 	}
 }
