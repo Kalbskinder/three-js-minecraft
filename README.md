@@ -1,0 +1,1 @@
+I don't like vibecoding. Human written code > over AI slop, this is just my spending my tokens for fun.
