@@ -98,6 +98,7 @@ const BLK = {
     DIRT: 9,
     BEDROCK: 19,
     SAND: 20,
+    WATER: 255,
 } as const;
 
 // ─── Structure entry ──────────────────────────────────────────────────────────
@@ -217,6 +218,17 @@ export class WorldGenerator {
                         }
                         // Direct write — same layout as chunk.setBlock(lx, ly, lz)
                         chunk.blocks[(lx * cs + ly) * cs + lz] = block;
+                    }
+                    
+                    // Fill with water above terrain up to sea level to create lakes
+                    if (surfaceY < this.seaLevel) {
+                        const waterTop = Math.min(this.seaLevel, cyMax - 1);
+                        for (let wy = surfaceY + 1; wy <= waterTop; wy++) {
+                            if (wy >= cyMin && wy < cyMax) {
+                                const ly = wy - cyMin;
+                                chunk.blocks[(lx * cs + ly) * cs + lz] = BLK.WATER;
+                            }
+                        }
                     }
                 }
             }

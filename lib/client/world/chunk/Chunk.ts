@@ -48,8 +48,9 @@ export default class Chunk {
 			// wireframe: true,
 			// side: DoubleSide,
 			vertexColors: true,
-			// transparent: true,
-			alphaTest: 0.5,
+			transparent: true,
+			alphaTest: 0.1,
+			depthWrite: true,
 		});
 
 		this.mesh = new Mesh(geometry, material);
@@ -126,21 +127,22 @@ export default class Chunk {
 							worldZPos + face.geometry.normal[2],
 						);
 						const neighbor = BlockRegistry.getBlock(neighborID);
-						if (neighbor.isOpaqueCube) continue;
-					}
+					// Cull if neighbor is opaque OR if it's the same block type (e.g., water against water)
+					if (neighbor.isOpaqueCube || neighbor.id === block.id) continue;
+				}
 
-					let r = face.geometry.brightness;
-					let g = face.geometry.brightness;
-					let b = face.geometry.brightness;
+				let r = face.geometry.brightness;
+				let g = face.geometry.brightness;
+				let b = face.geometry.brightness;
 
-					if (face.shouldTint) {
-						r *= colorMultiplier[0];
-						g *= colorMultiplier[1];
-						b *= colorMultiplier[2];
-					}
+				if (face.shouldTint) {
+					r *= colorMultiplier[0];
+					g *= colorMultiplier[1];
+					b *= colorMultiplier[2];
+				}
 
-					// TODO: add AO
-					// https://github.com/PrismarineJS/prismarine-viewer/blob/7102f49e287cab116802bc61ad03d05e2ad395db/viewer/lib/models.js#L326
+				// TODO: add AO
+				// https://github.com/PrismarineJS/prismarine-viewer/blob/7102f49e287cab116802bc61ad03d05e2ad395db/viewer/lib/models.js#L326
 
 
 					for (let j = 0; j < 3 * 4; j += 3) {

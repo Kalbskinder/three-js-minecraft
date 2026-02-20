@@ -6,6 +6,7 @@ import { BlockTransparent } from "./BlockTransparent";
 import { BlockLeaves } from "./BlockLeaves";
 import { BlockStair } from "./BlockStair";
 import { BlockEndPortalFrame } from "./BlockEndPortalFrame";
+import { FluidBlock } from "./FluidBlock";
 import type { TextureCoords } from "./BlockFace";
 
 export class BlockRegistry {
@@ -317,6 +318,8 @@ export class BlockRegistry {
 				.setTopFace([18, 9])
 				.setBottomFace([18, 5])
 				.setSideFaces([18, 7]),
+
+			new FluidBlock(255, "water").setTopFace([3, 0])
 		];
 
 		for (const block of blocks) {

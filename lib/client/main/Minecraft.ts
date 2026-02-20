@@ -8,6 +8,7 @@ import {
 	AmbientLight,
 	SRGBColorSpace,
 	Vector3,
+	FogExp2,
 } from "three";
 import { Settings } from "../settings/Settings";
 import { Sky } from "../world/sky/Sky";
@@ -125,12 +126,36 @@ class Minecraft {
 		// this.scene.add(dl)
 	}
 
+	private updateUnderwaterEffect() {
+		const camPos = this.camera.position;
+		const blockX = Math.floor(camPos.x);
+		const blockY = Math.floor(camPos.y);
+		const blockZ = Math.floor(camPos.z);
+		
+		const blockId = this.world.get(blockX, blockY, blockZ);
+		const block = BlockRegistry.getBlock(blockId);
+		const isUnderwater = block.name === "water";
+
+		if (isUnderwater) {
+			// Apply blue-tinted fog when underwater
+			if (!this.scene.fog) {
+				this.scene.fog = new FogExp2(0x1a5fb4, 0.08);
+			}
+		} else {
+			// Remove fog when not underwater
+			if (this.scene.fog) {
+				this.scene.fog = null;
+			}
+		}
+	}
+
 	private render() {
 		if (this.isMobile) {
 			this.controls.update();
 		} else {
 			this.controls.update(this.clock.getDelta());
 		}
+		this.updateUnderwaterEffect();
 		for (const cb of this.renderCallbacks) cb();
 		this.renderer.render(this.scene, this.camera);
 
